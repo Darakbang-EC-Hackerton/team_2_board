@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>게시판</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Maplestory 폰트 추가 - Bold */
+        @font-face {
+            font-family: 'MaplestoryBold';
+            src: url('/static/fonts/Maplestory Bold.ttf') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+        }
+
+        /* Maplestory 폰트 추가 - Light */
+        @font-face {
+            font-family: 'MaplestoryLight';
+            src: url('/static/fonts/Maplestory Light.ttf') format('truetype');
+            font-weight: 300;
+            font-style: normal;
+        }
+
+        /* 스타일 조정에서 폰트 적용 */
+        body {
+            font-family: 'MaplestoryLight', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            background: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+        }
+
+        h3, h4 {
+
+            font-family: 'MaplestoryBold', serif;
+        }
+
+        .btn-custom {
+            font-family: 'MaplestoryLight', serif;
+        }
+
+        /* 스타일 조정 */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            background: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            width: 100%;
+            max-width: 1200px;
+            height: 90vh;
+            background: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 30%;
+            border-right: 1px solid #ddd;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .main-content {
+            width: 70%;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .clickable {
+            cursor: pointer;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="sidebar">
+        <h3>게시판</h3>
+        <div class="mb-3 text-center">
+            <button class="btn btn-custom mx-1" onclick="fetchArticlesByCategory(1)">자유게시판</button><br>
+            <button class="btn btn-custom mx-1" onclick="fetchArticlesByCategory(2)">홍보게시판</button><br>
+            <button class="btn btn-custom mx-1" onclick="fetchArticlesByCategory(3)">공지게시판</button>
+        </div>
+
+        <h4 class="mt-4">게시글 목록</h4>
+        <div id="search-container">
+            <input type="text" id="search-input" class="form-control" placeholder="검색어 입력">
+            <button class="btn btn-primary mt-2" id="search-button">검색</button>
+        </div>
+        <ul id="article-list" class="list-group mt-3"></ul>
+        <p id="no-articles" class="mt-3 hidden">게시글이 없습니다.</p>
+    </div>
+
+    <div class="main-content">
+        <!-- 게시글 목록 페이지 -->
+        <div id="article-list-page">
+            <button class="btn btn-secondary" onclick="prepareNewPost()">새 글 작성</button>
+        </div>
+
+        <!-- 게시글 상세 페이지 -->
+        <div id="article-detail-page" class="hidden">
+            <h4 id="article-title"></h4>
+            <p id="article-content"></p>
+            <button class="btn btn-secondary" onclick="showPage('article-list-page')">목록으로</button>
+            <button class="btn btn-primary" id="edit-post" onclick="editPost()">수정</button>
+            <button class="btn btn-danger" id="delete-post" onclick="deletePost()">삭제</button>
+        </div>
+
+        <!-- 게시글 작성/수정 폼 페이지 -->
+        <div id="article-form-page" class="hidden">
+            <h4 id="form-title">새 글 작성</h4>
+            <form id="article-form">
+                <div class="mb-3">
+                    <label for="article-title-input" class="form-label">제목</label>
+                    <input type="text" class="form-control" id="article-title-input" required>
+                </div>
+                <div class="mb-3">
+                    <label for="article-category-input" class="form-label">카테고리</label>
+                    <select class="form-select" id="article-category-input" required>
+                        <option value="1">자유게시판</option>
+                        <option value="2">홍보게시판</option>
+                        <option value="3">공지게시판</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="article-content-input" class="form-label">내용</label>
+                    <textarea class="form-control" id="article-content-input" rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">저장</button>
+                <button type="button" class="btn btn-secondary" onclick="showPage('article-list-page')">취소</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<!-- Bootstrap JS and dependencies -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // 페이지 로드 시 기본 자유게시판의 게시글 목록 조회
+        fetchArticlesByCategory(1);
+
+        // 게시글 목록 조회 함수 (검색어 사용 가능)
+        function fetchArticles(query = '') {
+            let url = 'http://localhost:8080/api/articles';
+            if (query) {
+                url += `?search=${encodeURIComponent(query)}`;
+            }
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    displayArticles(data);
+                })
+                .catch(error => console.error('Error fetching articles:', error));
+        }
+
+        // 검색 버튼 클릭 시 검색 실행
+        document.getElementById('search-button').addEventListener('click', () => {
+            const query = document.getElementById('search-input').value;
+            fetchArticles(query);
+        });
+    });
+
+    function prepareNewPost() {
+        showPage('article-form-page');
+        document.getElementById('form-title').innerText = '새 글 작성';
+        document.getElementById('article-title-input').value = '';
+        document.getElementById('article-content-input').value = '';
+        document.getElementById('article-category-input').value = '1';
+        document.getElementById('article-form').dataset.mode = 'create';
+    }
+
+    // 페이지 전환 함수
+    // 페이지 전환 함수
+    function showPage(pageId) {
+        document.getElementById('article-list-page').style.display = 'none';
+        document.getElementById('article-detail-page').style.display = 'none';
+        document.getElementById('article-form-page').style.display = 'none';
+        document.getElementById(pageId).style.display = 'block';
+
+        if (pageId === 'article-list-page') {
+            document.getElementById('search-container').style.display = 'block';
+            fetchArticlesByCategory(1); // 목록으로 돌아올 때 목록을 새로고침
+        } else {
+            document.getElementById('search-container').style.display = 'none';
+        }
+    }
+
+    // 카테고리별 게시글 목록 조회 함수
+    function fetchArticlesByCategory(category) {
+        const url = `http://localhost:8080/api/articles/category/${category}`;
+
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                displayArticles(data);
+            })
+            .catch(error => console.error('Error fetching articles by category:', error));
+    }
+
+
+    // 게시글 목록 표시 함수 (제목 왼쪽, 카테고리 오른쪽)
+    function displayArticles(data) {
+        const list = document.getElementById('article-list');
+        const noArticles = document.getElementById('no-articles');
+        list.innerHTML = ''; // 기존 목록 초기화
+        if (data.length === 0) {
+            noArticles.style.display = 'block';
+        } else {
+            noArticles.style.display = 'none';
+            data.forEach(article => {
+                const listItem = document.createElement('li');
+                listItem.className = 'list-group-item d-flex justify-content-between align-items-center clickable';
+
+                // 제목 요소 생성
+                const titleSpan = document.createElement('span');
+                titleSpan.innerText = article.title;
+
+                // 카테고리 뱃지 생성 (오른쪽)
+                const categoryBadge = document.createElement('span');
+                categoryBadge.className = 'badge bg-secondary ms-2';
+
+// 카테고리 값에 따른 뱃지 텍스트 설정
+                if (article.category === 1) {
+                    categoryBadge.innerText = '자유게시판';
+                } else if (article.category === 2) {
+                    categoryBadge.innerText = '홍보' + '게시판';
+                } else if (article.category === 3) {
+                    categoryBadge.innerText = '공지게시판';
+                } else {
+                    categoryBadge.innerText = `카테고리 ${article.category}`;
+                }
+
+
+                // 목록 항목에 제목과 카테고리 추가
+                listItem.appendChild(titleSpan);
+                listItem.appendChild(categoryBadge);
+
+                listItem.addEventListener('click', () => {
+                    showPage('article-detail-page');
+                    document.getElementById('article-title').innerText = article.title;
+                    document.getElementById('article-content').innerText = article.content;
+                    document.getElementById('edit-post').setAttribute('data-id', article.id);
+                    document.getElementById('delete-post').setAttribute('data-id', article.id);
+                });
+                list.appendChild(listItem);
+            });
+        }
+    }
+
+    // 게시글 삭제 함수
+    function deletePost() {
+        const articleId = document.getElementById('delete-post').getAttribute('data-id');
+        const url = `http://localhost:8080/api/articles/${articleId}`;
+
+        fetch(url, { method: 'DELETE' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok ' + response.statusText);
+                }
+                alert('게시글이 삭제되었습니다.');
+                showPage('article-list-page');
+                fetchArticlesByCategory(1); // 삭제 후 목록 새로 고침 (기본 자유게시판로)
+            })
+            .catch(error => console.error('Error deleting article:', error));
+    }
+
+    // 게시글 수정 함수
+    function editPost() {
+        const articleId = document.getElementById('edit-post').getAttribute('data-id');
+        fetch(`http://localhost:8080/api/articles/${articleId}`)
+            .then(response => response.json())
+            .then(article => {
+                showPage('article-form-page');
+                document.getElementById('form-title').innerText = '게시글 수정';
+                document.getElementById('article-title-input').value = article.title;
+                document.getElementById('article-content-input').value = article.content;
+                document.getElementById('article-category-input').value = article.category;
+                document.getElementById('article-form').dataset.mode = 'edit';
+                document.getElementById('article-form').setAttribute('data-id', articleId);
+            })
+            .catch(error => console.error('Error fetching article:', error));
+    }
+
+    // 새 게시글 생성/수정 처리
+    document.getElementById('article-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const mode = event.target.dataset.mode;
+        const title = document.getElementById('article-title-input').value;
+        const content = document.getElementById('article-content-input').value;
+        const category = document.getElementById('article-category-input').value;
+        const articleData = { title, content, category };
+
+        if (mode === 'create') {
+            fetch('http://localhost:8080/api/articles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(articleData)
+            })
+                .then(() => {
+                    alert('새 게시글이 생성되었습니다.');
+                    showPage('article-list-page');
+                    fetchArticlesByCategory(1);
+                })
+                .catch(error => console.error('Error creating article:', error));
+        } else if (mode === 'edit') {
+            const articleId = event.currentTarget.getAttribute('data-id');
+            fetch(`http://localhost:8080/api/articles/${articleId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(articleData)
+            })
+                .then(() => {
+                    alert('게시글이 수정되었습니다.');
+                    showPage('article-list-page');
+                    fetchArticlesByCategory(1);
+                })
+                .catch(error => console.error('Error updating article:', error));
+        }
+    });
+</script>
+</body>
+</html>
